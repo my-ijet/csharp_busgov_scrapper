@@ -1,14 +1,24 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
 using ClosedXML.Excel;
 
-var today_str = DateTime.Today.ToString();
+
+var driver_options = new ChromeOptions();
+// driver_options.AddArgument("headless");
+IWebDriver driver = new ChromeDriver(driver_options);
+
+AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
 
 //read the xlsx file
 var name_of_file = "список.xlsx";
 using var workbook = new XLWorkbook(name_of_file);
 var ws = workbook.Worksheet(1);
+
+var today_str = DateTime.Today.ToString();
+var wait_seconds = 10;
 
 int gl_row = 3;
 int gl_column = 4;
@@ -31,13 +41,13 @@ while (true)
 {
   var name_of_org = ws.Cell(gl_row, 3).Value.ToString();
   if (string.IsNullOrEmpty(name_of_org)) break;
-  Console.WriteLine($"Обработка {name_of_org} ...");
+  Console.Write($"Обработка {name_of_org} ...");
   var org = new OrgInfo(name_of_org);
 
   var web_address = ws.Cell(gl_row, 2).Value.ToString();
   if (string.IsNullOrEmpty(web_address))
   {
-    Console.WriteLine("\t отсутствует вэб адрес");
+    Console.WriteLine("\n\t отсутствует вэб адрес");
     next_org();
     continue;
   }
@@ -49,10 +59,13 @@ while (true)
   }
   catch (System.Exception)
   {
-    Console.WriteLine("\t ошибка получения информации со страницы");
+    Console.WriteLine("\n\t ошибка получения информации со страницы");
     next_org();
     continue;
   }
+  var cursor_position = Console.GetCursorPosition();
+  Console.SetCursorPosition(cursor_position.Left - 3, cursor_position.Top);
+  Console.WriteLine("OK");
 
   ws.Cell(gl_row, gl_column).Value = org.num_average;         // Общая средняя оценка
   ws.Cell(gl_row, gl_column + 1).Value = org.num_of_reviews;  // Количество отзывов
@@ -88,16 +101,46 @@ Console.ReadKey(true);
 workbook.Save();
 
 cross_platform_open_file(name_of_file);
+driver.Quit();
 // end
 
 
-void get_org_info(ref OrgInfo org_info)
+void get_org_info(ref OrgInfo org)
 {
+  // loading the target web page 
+  driver.Navigate().GoToUrl(org.web_address);
+  Thread.Sleep(wait_seconds * 1000); // 10000 milliseconds = 10 seconds
+
+  var div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
+  div = div.FindElement(By.TagName("span"));
+  org.num_of_reviews = Int32.Parse(div.Text.TrimStart('(').TrimEnd(')'));
+
+  div = driver.FindElement(By.ClassName("rating-by-values"));
+  var rows = div.FindElements(By.ClassName("rating-by-values-row"));
+
+  div = rows[0].FindElement(By.ClassName("count-of-votes"));
+  org.num5 = Int32.Parse(div.Text);
+  div = rows[1].FindElement(By.ClassName("count-of-votes"));
+  org.num4 = Int32.Parse(div.Text);
+  div = rows[2].FindElement(By.ClassName("count-of-votes"));
+  org.num3 = Int32.Parse(div.Text);
+  div = rows[3].FindElement(By.ClassName("count-of-votes"));
+  org.num2 = Int32.Parse(div.Text);
+  div = rows[4].FindElement(By.ClassName("count-of-votes"));
+  org.num1 = Int32.Parse(div.Text);
 }
 
 [MethodImpl(MethodImplOptions.AggressiveInlining)]
 void next_org()
 { gl_row += 7; }
+
+void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+{
+  Exception ex = (Exception)e.ExceptionObject;
+  Console.WriteLine($"Произошла ошибка:\n{ex.Message}");
+  // Handle the uncaught exception here
+  driver.Quit();
+}
 
 void cross_platform_open_file(string filePath)
 {
@@ -126,6 +169,7 @@ record struct OrgInfo
   {
     get
     {
+      if (num_total == 0) { return 0; }
       float number = (1 * num1 + 2 * num2 + 3 * num3 + 4 * num4 + 5 * num5) / (float)num_total;
       return MathF.Round(number, 2);
     }
