@@ -5,6 +5,51 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using ClosedXML.Excel;
 
+
+var wait_seconds = 30;
+// parse command line
+if (args.Length > 0)
+{
+  var first_arg = args[0];
+  if (first_arg == "-h" || first_arg == "--help")
+  {
+    print_comand_line_help();
+    return;
+  }
+  if (args.Length < 2 || args.Length > 2)
+  {
+    Console.WriteLine("Неверное количество аргументов.");
+    print_comand_line_help();
+    return;
+  }
+
+  var second_arg = args[1];
+  if (first_arg == "-t")
+  {
+    try { wait_seconds = int.Parse(second_arg); }
+    catch (System.Exception e)
+    {
+      Console.WriteLine($"Ошибка преобразования второго аргумента:\n{e.Message}");
+      print_comand_line_help();
+      return;
+    }
+  }
+  else
+  {
+    Console.WriteLine("Нет таких аргументов.");
+    print_comand_line_help();
+    return;
+  }
+}
+
+void print_comand_line_help()
+{
+  Console.WriteLine("\nИспользование: -t <время_ожидания_в_секундах>");
+}
+// parse command line
+
+
+
 var chromeDriverService = ChromeDriverService.CreateDefaultService();
 chromeDriverService.HideCommandPromptWindow = true;  // This line hides the command prompt window
 chromeDriverService.EnableVerboseLogging = false;    // This line disables verbose logging
@@ -14,7 +59,17 @@ var driver_options = new ChromeOptions();
 driver_options.AddArgument("headless");
 IWebDriver driver = new ChromeDriver(chromeDriverService, driver_options);
 
-AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
+AppDomain.CurrentDomain.UnhandledException += (object sender, UnhandledExceptionEventArgs e) =>
+                                              {
+                                                Exception ex = (Exception)e.ExceptionObject;
+                                                Console.WriteLine($"Произошла ошибка:\n{ex.Message}");
+                                                // Handle the uncaught exception here
+                                                // quit_app();
+                                              };
+
+Console.CancelKeyPress += new ConsoleCancelEventHandler(
+    (object? sender, ConsoleCancelEventArgs e) => { quit_app(); }
+  );
 
 //read the xlsx file
 var name_of_file = "список.xlsx";
@@ -22,7 +77,6 @@ using var workbook = new XLWorkbook(name_of_file);
 var ws = workbook.Worksheet(1);
 
 var today_str = DateTime.Today.ToString();
-var wait_seconds = 15;
 
 int gl_row = 3;
 int gl_column = 4;
@@ -30,6 +84,9 @@ int gl_column = 4;
 
 Console.CursorVisible = false;
 Console.Clear();
+
+Console.WriteLine($"Ожидание загрузки страницы максимум {wait_seconds} сек.");
+Console.WriteLine("Используйте аргумент -t для изменения.");
 
 // get last column of reviews
 while (true)
@@ -74,7 +131,7 @@ while (true)
     next_org();
     continue;
   }
-  Console.WriteLine("OK                                 ");
+  Console.WriteLine("✓                                 ");
 
   ws.Cell(gl_row, gl_column).Value = org.num_average;         // Общая средняя оценка
   ws.Cell(gl_row, gl_column + 1).Value = org.num_of_reviews;  // Количество отзывов
@@ -90,14 +147,16 @@ while (true)
 }
 outline_cells();
 
-Console.Write("Обработка завершена.");
+Console.CursorVisible = true;
+Console.WriteLine("Обработка завершена.");
 Console.WriteLine("нажмите любую кнопку для завершения ...");
 Console.ReadKey(true);
 workbook.Save();
 
 cross_platform_open_file(name_of_file);
-driver.Quit();
-// end
+
+quit_app();
+
 
 void outline_cells()
 {
@@ -110,25 +169,64 @@ void outline_cells()
 
 void format_org_cells()
 {
-  ws.Cell(gl_row, gl_column).Style.NumberFormat.Format = "0.00";
-  ws.Cell(gl_row, gl_column + 1).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 1, gl_column).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 2, gl_column).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 3, gl_column).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 4, gl_column).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 5, gl_column).Style.NumberFormat.Format = "0";
-  ws.Cell(gl_row + 6, gl_column).Style.NumberFormat.Format = "0";
+  var cell_num_average = ws.Cell(gl_row, gl_column);          // Общая средняя оценка
+  var cell_num_of_reviews = ws.Cell(gl_row, gl_column + 1);   // Количество отзывов
+  var cell_num5 = ws.Cell(gl_row + 1, gl_column);             // 5
+  var cell_num4 = ws.Cell(gl_row + 2, gl_column);             // 4
+  var cell_num3 = ws.Cell(gl_row + 3, gl_column);             // 3
+  var cell_num2 = ws.Cell(gl_row + 4, gl_column);             // 2
+  var cell_num1 = ws.Cell(gl_row + 5, gl_column);             // 1
+  var cell_num_total = ws.Cell(gl_row + 6, gl_column);        // Итого оценок
+
+  List<IXLCell> list_of_cells = [cell_num_average, cell_num_of_reviews, cell_num5, cell_num4, cell_num3, cell_num2, cell_num1, cell_num_total];
+
+  for (int i = 0; i < list_of_cells.Count; i++)
+  {
+    string new_format = "0";
+    if (i == 0) new_format = "0.00";
+    list_of_cells[i].Style.NumberFormat.Format = new_format;
+  }
 
   ws.Range(
     ws.Cell(gl_row + 1, gl_column + 1),
     ws.Cell(gl_row + 6, gl_column + 1)
    ).Merge();
+
+  if (gl_column == 4) return;
+  // previous rating
+  var prev_cell_num_average = ws.Cell(gl_row, gl_column - 2);          // Общая средняя оценка
+  var prev_cell_num_of_reviews = ws.Cell(gl_row, gl_column - 1);       // Количество отзывов
+  var prev_cell_num5 = ws.Cell(gl_row + 1, gl_column - 2);             // 5
+  var prev_cell_num4 = ws.Cell(gl_row + 2, gl_column - 2);             // 4
+  var prev_cell_num3 = ws.Cell(gl_row + 3, gl_column - 2);             // 3
+  var prev_cell_num2 = ws.Cell(gl_row + 4, gl_column - 2);             // 2
+  var prev_cell_num1 = ws.Cell(gl_row + 5, gl_column - 2);             // 1
+  var prev_cell_num_total = ws.Cell(gl_row + 6, gl_column - 2);        // Итого оценок
+
+  List<IXLCell> list_of_prev_cells = [prev_cell_num_average, prev_cell_num_of_reviews, prev_cell_num5, prev_cell_num4, prev_cell_num3, prev_cell_num2, prev_cell_num1, prev_cell_num_total];
+
+  for (int i = 0; i < list_of_prev_cells.Count; i++)
+  {
+    var cell = list_of_cells[i];
+    var prev_cell = list_of_prev_cells[i];
+    string symbol1 = (i > 3 && i < 7) ? "<" : ">";
+    string symbol2 = (i > 3 && i < 7) ? ">" : "<";
+
+    cell.AddConditionalFormat()
+      .WhenIsTrue($"{cell} {symbol1} {prev_cell}")
+      .Fill.SetBackgroundColor(XLColor.PastelGreen);
+    cell.AddConditionalFormat()
+      .WhenIsTrue($"{cell} {symbol2} {prev_cell}")
+      .Fill.SetBackgroundColor(XLColor.PastelRed);
+  }
+
 }
 
 void get_org_info(ref OrgInfo org)
 {
-  // loading the target web page 
+  // loading the target web page
   driver.Navigate().GoToUrl(org.web_address);
+  IWebElement div;
 
   var cursor_position = Console.GetCursorPosition();
   cursor_position.Left -= 3;
@@ -138,11 +236,12 @@ void get_org_info(ref OrgInfo org)
     Console.Write($"({wait_seconds - i})                                 ");
     Console.SetCursorPosition(cursor_position.Left, cursor_position.Top);
     Thread.Sleep(1000); // sleep for 1000 milliseconds = 1 second
-  }
 
-  var div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
-  div = div.FindElement(By.TagName("span"));
-  org.num_of_reviews = Int32.Parse(div.Text.TrimStart('(').TrimEnd(')'));
+    div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
+    div = div.FindElement(By.TagName("span"));
+    org.num_of_reviews = Int32.Parse(div.Text.TrimStart('(').TrimEnd(')'));
+    if (org.num_of_reviews > 0) break;
+  }
 
   div = driver.FindElement(By.ClassName("rating-by-values"));
   var rows = div.FindElements(By.ClassName("rating-by-values-row"));
@@ -163,14 +262,11 @@ void get_org_info(ref OrgInfo org)
 void next_org()
 { gl_row += 7; }
 
-void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+void quit_app()
 {
-  Exception ex = (Exception)e.ExceptionObject;
-  Console.WriteLine($"Произошла ошибка:\n{ex.Message}");
-  // Handle the uncaught exception here
+  Console.CursorVisible = true;
   driver.Quit();
 }
-
 void cross_platform_open_file(string filePath)
 {
   if (OperatingSystem.IsMacOS())
