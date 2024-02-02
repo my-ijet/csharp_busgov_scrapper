@@ -147,13 +147,14 @@ while (true)
 }
 outline_cells();
 
+workbook.Save();
+
 Console.CursorVisible = true;
 Console.WriteLine("Обработка завершена.");
 Console.WriteLine("нажмите любую кнопку для завершения ...");
 Console.ReadKey(true);
-workbook.Save();
 
-cross_platform_open_file(name_of_file);
+cross_platform_open_file(Path.GetFullPath(name_of_file));
 
 quit_app();
 
@@ -276,7 +277,7 @@ void cross_platform_open_file(string filePath)
   }
   else if (OperatingSystem.IsWindows())
   {
-    Process.Start(filePath);
+    Process.Start(@$"{filePath}");
   }
   else
   {
