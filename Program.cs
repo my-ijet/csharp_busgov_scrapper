@@ -5,10 +5,14 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using ClosedXML.Excel;
 
+var chromeDriverService = ChromeDriverService.CreateDefaultService();
+chromeDriverService.HideCommandPromptWindow = true;  // This line hides the command prompt window
+chromeDriverService.EnableVerboseLogging = false;    // This line disables verbose logging
+chromeDriverService.SuppressInitialDiagnosticInformation = true;  // This line suppresses initial diagnostic information
 
 var driver_options = new ChromeOptions();
-// driver_options.AddArgument("headless");
-IWebDriver driver = new ChromeDriver(driver_options);
+driver_options.AddArgument("headless");
+IWebDriver driver = new ChromeDriver(chromeDriverService, driver_options);
 
 AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
 
@@ -18,10 +22,14 @@ using var workbook = new XLWorkbook(name_of_file);
 var ws = workbook.Worksheet(1);
 
 var today_str = DateTime.Today.ToString();
-var wait_seconds = 10;
+var wait_seconds = 15;
 
 int gl_row = 3;
 int gl_column = 4;
+
+
+Console.CursorVisible = false;
+Console.Clear();
 
 // get last column of reviews
 while (true)
@@ -44,6 +52,9 @@ while (true)
   Console.Write($"Обработка {name_of_org} ...");
   var org = new OrgInfo(name_of_org);
 
+  // Prettier
+  format_org_cells();
+
   var web_address = ws.Cell(gl_row, 2).Value.ToString();
   if (string.IsNullOrEmpty(web_address))
   {
@@ -63,9 +74,7 @@ while (true)
     next_org();
     continue;
   }
-  var cursor_position = Console.GetCursorPosition();
-  Console.SetCursorPosition(cursor_position.Left - 3, cursor_position.Top);
-  Console.WriteLine("OK");
+  Console.WriteLine("OK                                 ");
 
   ws.Cell(gl_row, gl_column).Value = org.num_average;         // Общая средняя оценка
   ws.Cell(gl_row, gl_column + 1).Value = org.num_of_reviews;  // Количество отзывов
@@ -76,7 +85,31 @@ while (true)
   ws.Cell(gl_row + 5, gl_column).Value = org.num1;            // 1
   ws.Cell(gl_row + 6, gl_column).Value = org.num_total;       // Итого оценок
 
-  // Prettier
+
+  next_org();
+}
+outline_cells();
+
+Console.Write("Обработка завершена.");
+Console.WriteLine("нажмите любую кнопку для завершения ...");
+Console.ReadKey(true);
+workbook.Save();
+
+cross_platform_open_file(name_of_file);
+driver.Quit();
+// end
+
+void outline_cells()
+{
+  var range = ws.Range(
+    ws.Cell(1, gl_column),
+    ws.Cell(gl_row - 1, gl_column + 1));
+  range.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+  range.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+}
+
+void format_org_cells()
+{
   ws.Cell(gl_row, gl_column).Style.NumberFormat.Format = "0.00";
   ws.Cell(gl_row, gl_column + 1).Style.NumberFormat.Format = "0";
   ws.Cell(gl_row + 1, gl_column).Style.NumberFormat.Format = "0";
@@ -90,26 +123,22 @@ while (true)
     ws.Cell(gl_row + 1, gl_column + 1),
     ws.Cell(gl_row + 6, gl_column + 1)
    ).Merge();
-
-
-  next_org();
 }
-
-Console.Write("Обработка завершена.");
-Console.WriteLine("нажмите любую кнопку для завершения ...");
-Console.ReadKey(true);
-workbook.Save();
-
-cross_platform_open_file(name_of_file);
-driver.Quit();
-// end
-
 
 void get_org_info(ref OrgInfo org)
 {
   // loading the target web page 
   driver.Navigate().GoToUrl(org.web_address);
-  Thread.Sleep(wait_seconds * 1000); // 10000 milliseconds = 10 seconds
+
+  var cursor_position = Console.GetCursorPosition();
+  cursor_position.Left -= 3;
+  Console.SetCursorPosition(cursor_position.Left, cursor_position.Top);
+  for (int i = 0; i < wait_seconds; i++)
+  {
+    Console.Write($"({wait_seconds - i})                                 ");
+    Console.SetCursorPosition(cursor_position.Left, cursor_position.Top);
+    Thread.Sleep(1000); // sleep for 1000 milliseconds = 1 second
+  }
 
   var div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
   div = div.FindElement(By.TagName("span"));
