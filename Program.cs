@@ -131,7 +131,7 @@ while (true)
     next_org();
     continue;
   }
-  Console.WriteLine("✓                                 ");
+  Console.WriteLine(" ГОТОВО.                                 ");
 
   ws.Cell(gl_row, gl_column).Value = org.num_average;         // Общая средняя оценка
   ws.Cell(gl_row, gl_column + 1).Value = org.num_of_reviews;  // Количество отзывов
@@ -227,6 +227,7 @@ void get_org_info(ref OrgInfo org)
   // loading the target web page
   driver.Navigate().GoToUrl(org.web_address);
   IWebElement div;
+  Thread.Sleep(1000); // sleep for 1000 milliseconds = 1 second
 
   var cursor_position = Console.GetCursorPosition();
   cursor_position.Left -= 3;
