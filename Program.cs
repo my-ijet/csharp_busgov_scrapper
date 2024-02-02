@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Text;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using OpenQA.Selenium;
@@ -72,7 +72,7 @@ Console.CancelKeyPress += new ConsoleCancelEventHandler(
   );
 
 //read the xlsx file
-var name_of_file = "список.xlsx";
+var name_of_file = @"список.xlsx";
 using var workbook = new XLWorkbook(name_of_file);
 var ws = workbook.Worksheet(1);
 
@@ -91,7 +91,7 @@ Console.WriteLine("Используйте аргумент -t для измен�
 // get last column of reviews
 while (true)
 {
-  var date_of_review = ws.Cell(1, gl_column).Value.ToString();
+  var date_of_review = ws.Cell(1, gl_column).GetString();
   if (string.IsNullOrEmpty(date_of_review)) break;
   if (date_of_review == today_str) { break; }
   gl_column += 2;
@@ -104,7 +104,7 @@ ws.Cell(2, gl_column + 1).Value = "Кол-во отзывов";
 
 while (true)
 {
-  var name_of_org = ws.Cell(gl_row, 3).Value.ToString();
+  var name_of_org = ws.Cell(gl_row, 3).GetString();
   if (string.IsNullOrEmpty(name_of_org)) break;
   Console.Write($"Обработка {name_of_org} ...");
   var org = new OrgInfo(name_of_org);
@@ -112,7 +112,7 @@ while (true)
   // Prettier
   format_org_cells();
 
-  var web_address = ws.Cell(gl_row, 2).Value.ToString();
+  var web_address = ws.Cell(gl_row, 2).GetString();
   if (string.IsNullOrEmpty(web_address))
   {
     Console.WriteLine("\n\t отсутствует вэб адрес");
@@ -131,7 +131,7 @@ while (true)
     next_org();
     continue;
   }
-  Console.WriteLine(" ГОТОВО.                                 ");
+  Console.WriteLine("Готово.                                 ");
 
   ws.Cell(gl_row, gl_column).Value = org.num_average;         // Общая средняя оценка
   ws.Cell(gl_row, gl_column + 1).Value = org.num_of_reviews;  // Количество отзывов
@@ -154,7 +154,7 @@ Console.WriteLine("Обработка завершена.");
 Console.WriteLine("нажмите любую кнопку для завершения ...");
 Console.ReadKey(true);
 
-cross_platform_open_file(Path.GetFullPath(name_of_file));
+cross_platform_open_file(name_of_file);
 
 quit_app();
 
@@ -228,7 +228,6 @@ void get_org_info(ref OrgInfo org)
   // loading the target web page
   driver.Navigate().GoToUrl(org.web_address);
   IWebElement div;
-  Thread.Sleep(1000); // sleep for 1000 milliseconds = 1 second
 
   var cursor_position = Console.GetCursorPosition();
   cursor_position.Left -= 3;
@@ -239,9 +238,14 @@ void get_org_info(ref OrgInfo org)
     Console.SetCursorPosition(cursor_position.Left, cursor_position.Top);
     Thread.Sleep(1000); // sleep for 1000 milliseconds = 1 second
 
-    div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
-    div = div.FindElement(By.TagName("span"));
-    org.num_of_reviews = Int32.Parse(div.Text.TrimStart('(').TrimEnd(')'));
+    try
+    {
+      div = driver.FindElement(By.ClassName("independent-rating-tab-feedback-title-text"));
+      div = div.FindElement(By.TagName("span"));
+      org.num_of_reviews = Int32.Parse(div.Text.TrimStart('(').TrimEnd(')'));
+    }
+    catch (System.Exception) { continue; }
+
     if (org.num_of_reviews > 0) break;
   }
 
@@ -277,7 +281,9 @@ void cross_platform_open_file(string filePath)
   }
   else if (OperatingSystem.IsWindows())
   {
-    Process.Start(@$"{filePath}");
+    var p = new Process();
+    p.StartInfo = new(filePath) { UseShellExecute = true };
+    p.Start();
   }
   else
   {
