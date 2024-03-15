@@ -2,3 +2,6 @@ bin
 obj
 busgov_scrapper-win-x64.zip
 busgov_scrapper-win-x86.zip
+/.vs
+busgov_scrapper.csproj.user
+Properties/PublishProfiles/FolderProfile.pubxml.user
